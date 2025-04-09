@@ -19,7 +19,8 @@ public class BulldogGame {
     private JButton addPlayerButton, startGameButton;
     private JComboBox<String> playerTypeBox;
     private JTextField playerNameField;
-    private ArrayList<Player> players;
+    private PlayerManager playerManager;
+    private ScoreboardViewer scoreboardViewer;
     
     /**
      * Constructs a new BulldogGame, initializing the main game frame
@@ -27,7 +28,7 @@ public class BulldogGame {
      */
     
     public BulldogGame() {
-        players = new ArrayList<>();
+        playerManager = new PlayerManager();
         frame = new JFrame("Bulldog Game");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(900, 700);
@@ -156,14 +157,14 @@ public class BulldogGame {
         }
         
         if (newPlayer != null) {
-            players.add(newPlayer);
+            playerManager.addPlayer(newPlayer);
             addPlayerBox(newPlayer, type);
             playerNameField.setText("");
         }
         
-        if (players.size() >= 2 && players.size() <= 7) {
+        if (playerManager.getPlayerCount() >= 2 && playerManager.getPlayerCount() <= 7) {
             startGameButton.setEnabled(true);
-        } else if (players.size() > 7) {
+        } else if (playerManager.getPlayerCount() > 7) {
             addPlayerButton.setEnabled(false);
             JOptionPane.showMessageDialog(frame, "Maximum 7 players allowed", "Player Limit", JOptionPane.INFORMATION_MESSAGE);
         }
@@ -199,13 +200,13 @@ public class BulldogGame {
         JButton removeButton = new JButton("Remove");
         removeButton.setFont(new Font("Arial", Font.BOLD, 12));
         removeButton.addActionListener(e -> {
-            players.remove(player);
+            playerManager.removePlayer(player);
             playerListPanel.remove(playerBox);
             playerListPanel.revalidate();
             playerListPanel.repaint();
             
             // Update start button state
-            startGameButton.setEnabled(players.size() >= 2 && players.size() <= 7);
+            startGameButton.setEnabled(playerManager.getPlayerCount() >= 2 && playerManager.getPlayerCount() <= 7);
             addPlayerButton.setEnabled(true);
         });
         
@@ -284,32 +285,11 @@ public class BulldogGame {
         ));
         playerAreaPanel.setBackground(Color.WHITE);
         
-        // Create score panel on the right
-        JPanel scorePanel = new JPanel(new BorderLayout(0, 10));
-        scorePanel.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createTitledBorder(BorderFactory.createLineBorder(new Color(200, 200, 200), 1), "Player Scores"),
-            BorderFactory.createEmptyBorder(10, 10, 10, 10)
-        ));
-        scorePanel.setBackground(Color.WHITE);
-        scorePanel.setPreferredSize(new Dimension(200, 0));
+        // Store the turnLabel reference for later use
+        playerAreaPanel.putClientProperty("turnLabel", turnLabel);
         
-        // Score display with styled player entries
-        JPanel scoreListPanel = new JPanel();
-        scoreListPanel.setLayout(new BoxLayout(scoreListPanel, BoxLayout.Y_AXIS));
-        scoreListPanel.setBackground(Color.WHITE);
-        
-        // Add initial score entries
-        for (Player player : players) {
-            JPanel scoreEntryPanel = createScoreEntry(player, 0);
-            scoreListPanel.add(scoreEntryPanel);
-            scoreListPanel.add(Box.createVerticalStrut(5)); // Add spacing between entries
-        }
-        
-        JScrollPane scoreScroll = new JScrollPane(scoreListPanel);
-        scoreScroll.setBorder(BorderFactory.createEmptyBorder());
-        scoreScroll.getVerticalScrollBar().setUnitIncrement(16);
-        
-        scorePanel.add(scoreScroll, BorderLayout.CENTER);
+        // Create scoreboard viewer on the right
+        scoreboardViewer = new ScoreboardViewer(playerManager.getAllPlayers());
         
         // Add a home button to return to setup
         JButton homeButton = new JButton("End Game");
@@ -325,7 +305,10 @@ public class BulldogGame {
             }
         });
         
-        scorePanel.add(homeButton, BorderLayout.SOUTH);
+        // Add homeButton to scoreboardViewer
+        JPanel buttonPanel = new JPanel(new BorderLayout());
+        buttonPanel.add(homeButton, BorderLayout.CENTER);
+        scoreboardViewer.add(buttonPanel, BorderLayout.SOUTH);
         
         // Create game log panel at the bottom
         JPanel logPanel = new JPanel(new BorderLayout());
@@ -347,80 +330,35 @@ public class BulldogGame {
         
         logPanel.add(gameLogScroll, BorderLayout.CENTER);
         
+        // Store the gameLogArea reference for later use
+        playerAreaPanel.putClientProperty("gameLogArea", gameLogArea);
+        
         // Assemble the main game panel
         gamePanel.add(titlePanel, BorderLayout.NORTH);
         gamePanel.add(playerAreaPanel, BorderLayout.CENTER);
-        gamePanel.add(scorePanel, BorderLayout.EAST);
+        gamePanel.add(scoreboardViewer, BorderLayout.EAST);
         gamePanel.add(logPanel, BorderLayout.SOUTH);
-        
-        // Store references to components that will be updated during gameplay
-        playerAreaPanel.putClientProperty("turnLabel", turnLabel);
-        playerAreaPanel.putClientProperty("gameLogArea", gameLogArea);
-        scorePanel.putClientProperty("scoreListPanel", scoreListPanel);
         
         // Add the game panel to the frame
         frame.add(gamePanel);
-    }
-    /**
-     * Creates a score entry panel for a specific player.
-     * 
-     * @param player The Player whose score is being displayed
-     * @param score The initial score for the player
-     * @return A JPanel representing the player's score entry
-     */
-    private JPanel createScoreEntry(Player player, int score) {
-        JPanel scoreEntry = new JPanel(new BorderLayout(10, 0));
-        scoreEntry.setBackground(Color.WHITE);
-        scoreEntry.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createMatteBorder(0, 5, 0, 0, getPlayerTypeColor(getPlayerTypeName(player))),
-            BorderFactory.createEmptyBorder(8, 8, 8, 0)
-        ));
-        scoreEntry.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
-        
-        JLabel nameLabel = new JLabel(player.getName());
-        nameLabel.setFont(new Font("Arial", Font.BOLD, 14));
-        
-        JLabel scoreLabel = new JLabel(String.valueOf(score));
-        scoreLabel.setFont(new Font("Arial", Font.BOLD, 16));
-        scoreLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-        
-        scoreEntry.add(nameLabel, BorderLayout.WEST);
-        scoreEntry.add(scoreLabel, BorderLayout.EAST);
-        
-        // Store reference to the player for updating
-        scoreEntry.putClientProperty("player", player);
-        scoreEntry.putClientProperty("scoreLabel", scoreLabel);
-        
-        return scoreEntry;
-    }
-    
-    /**
-     * Determines the type name of a player based on its class.
-     * 
-     * @param player The Player object to identify
-     * @return A string representation of the player type
-     */
-    private String getPlayerTypeName(Player player) {
-        if (player instanceof HumanPlayer) return "Human Player";
-        if (player instanceof RandomPlayer) return "Random Player";
-        if (player instanceof FifteenPlayer) return "Fifteen Player";
-        if (player instanceof OddPlayer) return "Odd Player";
-        if (player instanceof WimpPlayer) return "Wimp Player";
-        return "Unknown Player";
     }
     
     private void runGame() {
         JLabel turnLabel = (JLabel) ((JPanel) gamePanel.getComponent(1)).getClientProperty("turnLabel");
         JTextArea gameLogArea = (JTextArea) ((JPanel) gamePanel.getComponent(1)).getClientProperty("gameLogArea");
-        JPanel scoreListPanel = (JPanel) ((JPanel) gamePanel.getComponent(2)).getClientProperty("scoreListPanel");
+        
+        // Get players from the PlayerManager
+        ArrayList<Player> players = playerManager.getAllPlayers();
         
         // Log game start
         logMessage(gameLogArea, "Game started with " + players.size() + " players");
         
         boolean won = false;
         while (!won) {
-            for (Player player : players) {
+            for (int i = 0; i < playerManager.getPlayerCount(); i++) {
                 if (won) break;
+                
+                Player player = playerManager.getPlayer(i);
                 
                 // Update turn label
                 SwingUtilities.invokeLater(() -> {
@@ -441,12 +379,12 @@ public class BulldogGame {
                         playerAreaPanel.add(playerFrame, BorderLayout.CENTER);
                     }
                     
-                    // Highlight the current player in the score panel
-                    highlightCurrentPlayer(scoreListPanel, player);
-                    
                     playerAreaPanel.revalidate();
                     playerAreaPanel.repaint();
                 });
+                
+                // Update the current player in the scoreboard
+                scoreboardViewer.setCurrentPlayer(player);
                 
                 logMessage(gameLogArea, player.getName() + "'s turn begins");
                 
@@ -454,17 +392,18 @@ public class BulldogGame {
                 int turnScore = player.play();
                 
                 // Update the player's score
-                player.setScore(player.getScore() + turnScore);
+                int newScore = player.getScore() + turnScore;
+                player.setScore(newScore);
+                
+                // Update the score in the scoreboard
+                scoreboardViewer.updateScore(player);
                 
                 logMessage(gameLogArea, player.getName() + " earned " + turnScore + " points this turn");
-                
-                // Update score display
-                updateScoreDisplay(scoreListPanel);
                 
                 // Check for win condition
                 if (player.getScore() >= WINNING_SCORE) {
                     logMessage(gameLogArea, player.getName() + " has won the game!");
-                    highlightWinner(scoreListPanel, player);
+                    scoreboardViewer.setWinner(player);
                     JOptionPane.showMessageDialog(frame, 
                         "Congratulations " + player.getName() + "! You win!", 
                         "Winner!", JOptionPane.INFORMATION_MESSAGE);
@@ -488,99 +427,6 @@ public class BulldogGame {
     }
     
     /**
-     * Highlights the current player in the score panel.
-     * 
-     * @param scoreListPanel The panel containing player scores
-     * @param currentPlayer The player whose turn is currently active
-     */
-    private void highlightCurrentPlayer(JPanel scoreListPanel, Player currentPlayer) {
-        Component[] components = scoreListPanel.getComponents();
-        
-        for (Component comp : components) {
-            if (comp instanceof JPanel) {
-                JPanel panel = (JPanel) comp;
-                Player panelPlayer = (Player) panel.getClientProperty("player");
-                
-                if (panelPlayer != null) {
-                    if (panelPlayer.equals(currentPlayer)) {
-                        panel.setBackground(new Color(245, 245, 255));
-                        panel.setBorder(BorderFactory.createCompoundBorder(
-                            BorderFactory.createMatteBorder(0, 5, 0, 0, getPlayerTypeColor(getPlayerTypeName(panelPlayer))),
-                            BorderFactory.createCompoundBorder(
-                                BorderFactory.createLineBorder(new Color(200, 200, 220), 1),
-                                BorderFactory.createEmptyBorder(7, 7, 7, 0)
-                            )
-                        ));
-                    } else {
-                        panel.setBackground(Color.WHITE);
-                        panel.setBorder(BorderFactory.createCompoundBorder(
-                            BorderFactory.createMatteBorder(0, 5, 0, 0, getPlayerTypeColor(getPlayerTypeName(panelPlayer))),
-                            BorderFactory.createEmptyBorder(8, 8, 8, 0)
-                        ));
-                    }
-                }
-            }
-        }
-        
-        scoreListPanel.revalidate();
-        scoreListPanel.repaint();
-    }
-    /**
-     * Highlights the winner of the game with a special visual effect.
-     * 
-     * @param scoreListPanel The panel containing player scores
-     * @param winner The Player who won the game
-     */
-    private void highlightWinner(JPanel scoreListPanel, Player winner) {
-        Component[] components = scoreListPanel.getComponents();
-        
-        for (Component comp : components) {
-            if (comp instanceof JPanel) {
-                JPanel panel = (JPanel) comp;
-                Player panelPlayer = (Player) panel.getClientProperty("player");
-                
-                if (panelPlayer != null && panelPlayer.equals(winner)) {
-                    panel.setBackground(new Color(255, 255, 220));
-                    panel.setBorder(BorderFactory.createCompoundBorder(
-                        BorderFactory.createMatteBorder(0, 5, 0, 0, new Color(255, 215, 0)), // Gold
-                        BorderFactory.createCompoundBorder(
-                            BorderFactory.createLineBorder(new Color(218, 165, 32), 1),
-                            BorderFactory.createEmptyBorder(7, 7, 7, 0)
-                        )
-                    ));
-                    
-                    JLabel nameLabel = (JLabel) panel.getComponent(0);
-                    nameLabel.setText(winner.getName() + " 🏆");
-                }
-            }
-        }
-        
-        scoreListPanel.revalidate();
-        scoreListPanel.repaint();
-    }
-    /**
-     * Updates the score display for all players.
-     * 
-     * @param scoreListPanel The panel containing player scores
-     */
-    private void updateScoreDisplay(JPanel scoreListPanel) {
-        SwingUtilities.invokeLater(() -> {
-            Component[] components = scoreListPanel.getComponents();
-            
-            for (Component comp : components) {
-                if (comp instanceof JPanel) {
-                    JPanel panel = (JPanel) comp;
-                    Player panelPlayer = (Player) panel.getClientProperty("player");
-                    JLabel scoreLabel = (JLabel) panel.getClientProperty("scoreLabel");
-                    
-                    if (panelPlayer != null && scoreLabel != null) {
-                        scoreLabel.setText(String.valueOf(panelPlayer.getScore()));
-                    }
-                }
-            }
-        });
-    }
-    /**
      * Logs a message to the game log area.
      * 
      * @param gameLogArea The text area for game log messages
@@ -593,6 +439,9 @@ public class BulldogGame {
         });
     }
     
+    /**
+     * Displays the win screen with options to play again or exit
+     */
     private void showWinScreen() {
         SwingUtilities.invokeLater(() -> {
             int response = JOptionPane.showConfirmDialog(frame, 
